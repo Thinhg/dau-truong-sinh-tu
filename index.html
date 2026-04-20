@@ -108,9 +108,10 @@
 
     <div id="name-modal" style="display: none;">
         <div class="bg-gray-800 p-6 mx-4 rounded-lg text-center border-2 border-blue-500 w-full max-w-sm">
-            <h2 class="pixel-font text-xl mb-4 text-blue-400">CREATE CHARACTER</h2>
+            <h2 class="pixel-font text-xl mb-4 text-blue-400">LOGIN / CREATE</h2>
+            <p class="text-xs text-gray-400 mb-4">Enter your old name to load account!</p>
             <input type="text" id="player-name-input" placeholder="Enter your name..." class="w-full p-3 bg-gray-900 border border-gray-600 rounded text-white mb-4 outline-none focus:border-blue-500" maxlength="15">
-            <button onclick="saveName()" class="btn btn-primary w-full pixel-font">ENTER GAME</button>
+            <button id="btn-enter-game" onclick="saveName()" class="btn btn-primary w-full pixel-font">ENTER GAME</button>
         </div>
     </div>
 
@@ -130,6 +131,7 @@
             <div class="bg-gray-900 p-4 rounded-lg border border-gray-700 w-full max-w-sm mb-6">
                 <div class="flex justify-between items-center mb-2">
                     <span class="text-lg font-bold" id="ui-player-name">...</span>
+                    <button onclick="switchAccount()" class="text-[10px] bg-red-600 hover:bg-red-500 px-2 py-1 rounded text-white font-bold border border-red-400">LOGOUT</button>
                 </div>
                 <div class="flex justify-between items-center mb-1">
                     <span class="text-gray-400 text-sm flex items-center gap-2">Rank: 
@@ -252,7 +254,6 @@
     // FIREBASE CONFIG
     // ==========================================
     const myCustomFirebaseConfig = {
-        // Your config goes here
         apiKey: "AIzaSyDx5864sZLFO9bc53c1NXVajpsnDmJATt0",
         authDomain: "dautruongsinhtu-1f918.firebaseapp.com",
         projectId: "dautruongsinhtu-1f918",
@@ -327,7 +328,7 @@
     const getPrivateDocPath = (col, docId) => doc(db, 'artifacts', appId, 'users', currentUser.uid, col, docId);
 
     // ==========================================
-    // INITIALIZATION
+    // INITIALIZATION & LOGIN
     // ==========================================
     if (auth) {
         const initAuth = async () => {
@@ -345,11 +346,14 @@
                 try {
                     const docSnap = await getDoc(getPrivateDocPath('profile', 'data'));
                     if (docSnap.exists()) {
+                        // Tự động đăng nhập nếu đã có session cũ
                         myProfile = docSnap.data();
                         if(!myProfile.ownedSwords) myProfile.ownedSwords = ['wood'];
                         if(!myProfile.inventory) myProfile.inventory = { shield: 2, smoke: 0, revive: 0 };
                         showDashboard(); setupRealtimeListeners();
-                    } else { showNameModal(); }
+                    } else { 
+                        showNameModal(); 
+                    }
                 } catch(e) { showNameModal(); }
             }
         });
@@ -357,18 +361,103 @@
 
     function initLocal() {
         isFirebaseReady = false;
-        const saved = localStorage.getItem('dt_profile_offline');
-        if (saved) { 
-            myProfile = JSON.parse(saved); 
-            if(!myProfile.inventory) myProfile.inventory = { shield: 2, smoke: 0, revive: 0 };
-            showDashboard(); setupMockData(); 
-        } 
-        else { showNameModal(); }
+        const lastName = localStorage.getItem('dt_last_name');
+        if (lastName) {
+            const saved = localStorage.getItem('dt_profile_' + lastName);
+            if (saved) { 
+                myProfile = JSON.parse(saved); 
+                if(!myProfile.inventory) myProfile.inventory = { shield: 2, smoke: 0, revive: 0 };
+                showDashboard(); setupMockData(); 
+                return;
+            }
+        }
+        showNameModal(); 
     }
 
     function showNameModal() {
         document.getElementById('loading-overlay').style.display = 'none';
         document.getElementById('name-modal').style.display = 'flex';
+        // Tự động điền lại tên cũ nếu có trong trình duyệt
+        const lastName = localStorage.getItem('dt_last_name');
+        if(lastName) document.getElementById('player-name-input').value = lastName;
+    }
+
+    window.saveName = async () => {
+        const name = document.getElementById('player-name-input').value.trim();
+        if (!name) return;
+
+        const btn = document.getElementById('btn-enter-game');
+        btn.innerText = "LOADING..."; btn.disabled = true;
+
+        localStorage.setItem('dt_last_name', name);
+        
+        if(isFirebaseReady && currentUser) {
+            try {
+                const playerDocRef = getPublicDocPath('players', name);
+                const docSnap = await getDoc(playerDocRef);
+
+                if (docSnap.exists()) {
+                    // PHỤC HỒI TÀI KHOẢN CŨ
+                    myProfile = docSnap.data();
+                    if(!myProfile.ownedSwords) myProfile.ownedSwords = ['wood'];
+                    if(!myProfile.inventory) myProfile.inventory = { shield: 2, smoke: 0, revive: 0 };
+                    myProfile.uid = currentUser.uid; 
+                } else {
+                    // TẠO TÀI KHOẢN MỚI
+                    myProfile.name = name;
+                    myProfile.uid = currentUser.uid;
+                    myProfile.rp = 0; myProfile.gold = 0;
+                    myProfile.sword = 'wood'; myProfile.ownedSwords = ['wood'];
+                    myProfile.inventory = { shield: 2, smoke: 0, revive: 0 };
+                    generateNewQuestsLocal();
+                    await setDoc(playerDocRef, myProfile);
+                }
+
+                // Lưu lại để lần sau vào trình duyệt tự động đăng nhập
+                await setDoc(getPrivateDocPath('profile', 'data'), myProfile);
+                await setDoc(getPublicDocPath('leaderboard', name), { name: myProfile.name, rp: myProfile.rp, uid: currentUser.uid });
+                setupRealtimeListeners();
+            } catch (e) { console.error("Lỗi khi tải tài khoản:", e); }
+        } else {
+            // Offline Local Storage logic
+            const saved = localStorage.getItem('dt_profile_' + name);
+            if (saved) {
+                myProfile = JSON.parse(saved);
+                if(!myProfile.inventory) myProfile.inventory = { shield: 2, smoke: 0, revive: 0 };
+            } else {
+                myProfile.name = name;
+                myProfile.rp = 0; myProfile.gold = 0;
+                myProfile.sword = 'wood'; myProfile.ownedSwords = ['wood'];
+                myProfile.inventory = { shield: 2, smoke: 0, revive: 0 };
+                generateNewQuestsLocal();
+                localStorage.setItem('dt_profile_' + name, JSON.stringify(myProfile));
+            }
+            setupMockData();
+        }
+
+        btn.innerText = "ENTER GAME"; btn.disabled = false;
+        showDashboard();
+    }
+
+    // Nút LOGOUT / Chuyển tài khoản
+    window.switchAccount = async () => {
+        if(isFirebaseReady && currentUser) {
+            try { await deleteDoc(getPrivateDocPath('profile', 'data')); } catch(e){}
+        }
+        localStorage.removeItem('dt_last_name');
+        location.reload();
+    }
+
+    async function saveProfileData() {
+        if (isFirebaseReady && currentUser) {
+            try {
+                myProfile.rp = myProfile.rp || 0;
+                await updateDoc(getPrivateDocPath('profile', 'data'), myProfile);
+                await setDoc(getPublicDocPath('players', myProfile.name), myProfile); // Lưu cả vào database Public
+                await setDoc(getPublicDocPath('leaderboard', myProfile.name), { name: myProfile.name, rp: myProfile.rp, uid: currentUser.uid });
+            } catch (e) {}
+        } else { localStorage.setItem('dt_profile_' + myProfile.name, JSON.stringify(myProfile)); }
+        updateDashboardUI();
     }
 
     function showDashboard() {
@@ -383,37 +472,6 @@
             </div>`
         ).join('');
 
-        updateDashboardUI();
-    }
-
-    window.saveName = async () => {
-        const name = document.getElementById('player-name-input').value.trim();
-        if (!name) return;
-        myProfile.name = name;
-        if(myProfile.quests.length === 0) generateNewQuestsLocal();
-        
-        if(isFirebaseReady && currentUser) {
-            myProfile.uid = currentUser.uid;
-            try {
-                await setDoc(getPrivateDocPath('profile', 'data'), myProfile);
-                await setDoc(getPublicDocPath('leaderboard', currentUser.uid), { name: myProfile.name, rp: myProfile.rp, uid: currentUser.uid });
-                setupRealtimeListeners();
-            } catch (e) {}
-        } else {
-            localStorage.setItem('dt_profile_offline', JSON.stringify(myProfile));
-            setupMockData();
-        }
-        showDashboard();
-    }
-
-    async function saveProfileData() {
-        if (isFirebaseReady && currentUser) {
-            try {
-                myProfile.rp = myProfile.rp || 0;
-                await updateDoc(getPrivateDocPath('profile', 'data'), myProfile);
-                await updateDoc(getPublicDocPath('leaderboard', currentUser.uid), { rp: myProfile.rp });
-            } catch (e) {}
-        } else { localStorage.setItem('dt_profile_offline', JSON.stringify(myProfile)); }
         updateDashboardUI();
     }
 
@@ -566,7 +624,7 @@
     const canvasEl = document.getElementById('gameCanvas');
     const ctx = canvasEl.getContext('2d');
     let p1, p2, loopId, particles = [], smokes = [], timer = 60, timerId, gameEnded = false;
-    let roomUnsub = null, syncInterval = null; // FIXED: Added missing variable declarations back
+    let roomUnsub = null, syncInterval = null;
 
     const keys = { left: false, right: false, up: false, attack: false };
 
@@ -586,7 +644,6 @@
             if(this.flicker>0) this.flicker--;
             ctx.fillRect(this.pos.x, this.pos.y, this.w, this.h);
             
-            // Shield Effect
             if(this.shieldTime > 0) {
                 ctx.beginPath();
                 ctx.arc(this.pos.x + this.w/2, this.pos.y + this.h/2, 75, 0, Math.PI*2);
@@ -638,7 +695,6 @@
             this.hp -= amt;
             this.flicker = 10;
             
-            // Passive Revive Logic
             if(this.hp <= 0 && this.isLocal && myProfile.inventory.revive > 0) {
                 this.hp = 50;
                 myProfile.inventory.revive--;
@@ -653,7 +709,6 @@
         }
     }
 
-    // --- ITEMS USAGE ---
     window.useItem = (type) => {
         if(gameState === 'dashboard' || gameEnded || isRoundTransition) return;
         let me = (gameState==='playing_practice' || isHost) ? p1 : p2;
@@ -664,7 +719,7 @@
             saveProfileData(); updateItemUI();
             
             if(type === 'shield') {
-                me.shieldTime = 180; // 3 secs
+                me.shieldTime = 180;
             } else if(type === 'smoke') {
                 spawnSmoke(me.pos.x);
                 if(gameState !== 'playing_practice') {
@@ -676,10 +731,9 @@
     }
 
     function spawnSmoke(x) {
-        smokes.push({x: x - 150, y: 0, w: 350, h: 576, time: 300}); // 5 secs
+        smokes.push({x: x - 150, y: 0, w: 350, h: 576, time: 300}); 
     }
 
-    // --- MOBILE CONTROLS ---
     function bindTouchBtn(id, keyName, isAction = false) {
         const btn = document.getElementById(id);
         const press = (e) => { 
@@ -713,7 +767,6 @@
         if(e.code==='Space') keys.attack = false;
     });
 
-    // --- MATCHMAKING & ROUND LOGIC ---
     window.startPractice = () => {
         matchMode = 'practice'; winTarget = 1; gameState = 'playing_practice';
         document.getElementById('dashboard').style.display = 'none';
@@ -739,17 +792,14 @@
             const docSnap = await getDoc(queueDoc);
             let isGhost = false;
             
-            // Check Ghost Room: If older than 6 seconds without a ping, it's dead
             if (docSnap.exists() && docSnap.data().state === 'waiting') {
                 if (Date.now() - (docSnap.data().lastPing || 0) > 6000) isGhost = true;
             }
 
-            // Join existing room
             if (docSnap.exists() && docSnap.data().state === 'waiting' && docSnap.data().p1 !== currentUser.uid && !isGhost) {
                 isHost = false; 
                 currentRoomId = docSnap.data().roomId || ('room_' + Date.now()); 
                 
-                // Clear the Queue immediately so 3rd player can't overwrite
                 await deleteDoc(queueDoc);
 
                 const roomRef = getPublicDocPath('rooms', currentRoomId);
@@ -764,7 +814,6 @@
                     p2Name: myProfile.name, p2Sword: myProfile.sword
                 });
             } else {
-                // Create New Room Queue
                 isHost = true; 
                 currentRoomId = 'room_' + currentUser.uid + '_' + Date.now();
                 
@@ -801,7 +850,6 @@
         if(roomUnsub) { roomUnsub(); roomUnsub = null; }
         if(queuePingInterval) clearInterval(queuePingInterval);
 
-        // Delete the queue doc if we are the host
         if (isHost && currentRoomId) {
             const queueName = matchMode === 'ranked' ? 'ranked_queue' : 'normal_queue';
             const queueDoc = getPublicDocPath('rooms', queueName);
@@ -834,7 +882,6 @@
             if(gameEnded) return;
             let me = isHost ? p1 : p2;
             let data = {};
-            // Gửi cả Timestamp để check AFK
             data[isHost ? 'p1State' : 'p2State'] = { x: me.pos.x, y: me.pos.y, atk: me.isAtk, faceRight: me.faceRight, shieldTime: me.shieldTime, ts: Date.now() };
             if (isHost) data.timer = timer; 
             updateDoc(roomRef, data).catch(e=>{});
@@ -846,7 +893,6 @@
                 let opp = isHost ? p2 : p1;
                 let me = isHost ? p1 : p2;
                 
-                // Nếu đối thủ chủ động bấm Exit
                 if (data.left) {
                     opp.hp = 0;
                     updateUI();
@@ -956,7 +1002,6 @@
     }
     
     function loop() {
-        // Stop execution if not in playing state
         if(gameState !== 'playing_practice' && gameState !== 'playing_ranked' && gameState !== 'playing_normal') return;
         loopId = requestAnimationFrame(loop);
         
@@ -977,7 +1022,6 @@
 
         p1.update(); p2.update();
 
-        // Render Smokes
         for(let i=smokes.length-1; i>=0; i--) {
             let s = smokes[i];
             ctx.fillStyle = `rgba(15,15,15,${Math.min(s.time/60, 0.98)})`;
@@ -986,7 +1030,6 @@
             if(s.time <= 0) smokes.splice(i, 1);
         }
 
-        // Bắt lỗi đối thủ đóng trình duyệt / mất kết nối mạng
         if (!gameEnded && !isRoundTransition && (gameState === 'playing_ranked' || gameState === 'playing_normal')) {
             if (opponentLastTs > 0 && Date.now() - opponentLastTs > 6000) {
                 let opp = isHost ? p2 : p1;
@@ -1132,7 +1175,6 @@
         }, 1000);
     }
 
-    // Cơ chế Dọn dẹp Safe Exit
     window.exitGame = () => {
         try {
             gameState = 'dashboard';
@@ -1141,7 +1183,6 @@
             document.querySelectorAll('.btn-match').forEach(b => b.disabled = false);
             updateDashboardUI();
             
-            // Xóa toàn bộ Timeout/Interval chạy ngầm
             cancelAnimationFrame(loopId); 
             clearTimeout(timerId); 
             clearInterval(skipInterval);
@@ -1149,7 +1190,6 @@
             if (syncInterval) clearInterval(syncInterval);
             if (roomUnsub) { roomUnsub(); roomUnsub = null; }
 
-            // Báo cho đối thủ là mình đã thoát
             if ((matchMode === 'ranked' || matchMode === 'normal') && currentRoomId) {
                 const roomRef = getPublicDocPath('rooms', currentRoomId);
                 updateDoc(roomRef, { left: true }).catch(e=>{});
