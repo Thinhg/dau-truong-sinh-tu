@@ -220,6 +220,7 @@
     // CẤU HÌNH FIREBASE Ở ĐÂY
     // ==========================================
     const myCustomFirebaseConfig = {
+        // Nhập cấu hình của bạn vào đây (Bỏ comment // đi)
         apiKey: "AIzaSyDx5864sZLFO9bc53c1NXVajpsnDmJATt0",
         authDomain: "dautruongsinhtu-1f918.firebaseapp.com",
         projectId: "dautruongsinhtu-1f918",
@@ -594,11 +595,17 @@
             const docSnap = await getDoc(queueDoc);
             if (docSnap.exists() && docSnap.data().state === 'waiting' && docSnap.data().p1 !== currentUser.uid) {
                 isHost = false; currentRoomId = queueName;
-                await updateDoc(queueDoc, { p2: currentUser.uid, p2Name: myProfile.name, p2Sword: myProfile.sword, state: 'playing' });
+                await updateDoc(queueDoc, { 
+                    p2: currentUser.uid, p2Name: myProfile.name, p2Sword: myProfile.sword, state: 'playing',
+                    p1hp: 100, p2hp: 100, p1Score: 0, p2Score: 0, currentRound: 1, timer: 60 
+                });
                 startGameNetwork(docSnap.data());
             } else {
                 isHost = true; currentRoomId = queueName;
-                await setDoc(queueDoc, { p1: currentUser.uid, p1Name: myProfile.name, p1Sword: myProfile.sword, state: 'waiting' });
+                await setDoc(queueDoc, { 
+                    p1: currentUser.uid, p1Name: myProfile.name, p1Sword: myProfile.sword, state: 'waiting',
+                    p1hp: 100, p2hp: 100, p1Score: 0, p2Score: 0, currentRound: 1, timer: 60 
+                });
                 roomUnsub = onSnapshot(queueDoc, snap => {
                     if(snap.exists() && snap.data().state === 'playing') {
                         if(roomUnsub) roomUnsub();
@@ -634,7 +641,8 @@
             if(gameEnded) return;
             let me = isHost ? p1 : p2;
             let data = {};
-            data[isHost ? 'p1State' : 'p2State'] = { x: me.pos.x, y: me.pos.y, hp: me.hp, atk: me.isAtk };
+            data[isHost ? 'p1State' : 'p2State'] = { x: me.pos.x, y: me.pos.y, atk: me.isAtk };
+            if (isHost) data.timer = timer; // Host đồng bộ thời gian đếm ngược
             updateDoc(roomRef, data).catch(e=>{});
         }, 100);
 
@@ -642,11 +650,42 @@
             if(snap.exists() && !gameEnded) {
                 let data = snap.data();
                 let opp = isHost ? p2 : p1;
+                let me = isHost ? p1 : p2;
+                
                 let oppState = isHost ? data.p2State : data.p1State;
                 if(oppState) {
                     opp.targetX = oppState.x; opp.targetY = oppState.y;
-                    if(oppState.atk && !opp.isAtk) opp.attack();
-                    if(oppState.hp < opp.hp) opp.takeDmg(opp.hp - oppState.hp, opp.faceRight ? -1 : 1);
+                    if(oppState.atk && !opp.isAtk && !isRoundTransition) opp.attack();
+                }
+
+                // CHỈ đồng bộ Máu và Tỷ số khi không nằm trong lúc chuyển giao giữa các hiệp để tránh lỗi Reset
+                if (!isRoundTransition) {
+                    let serverMeHp = isHost ? data.p1hp : data.p2hp;
+                    let serverOppHp = isHost ? data.p2hp : data.p1hp;
+                    
+                    if (serverMeHp !== undefined && serverMeHp !== me.hp) {
+                        if (serverMeHp < me.hp) me.takeDmg(me.hp - serverMeHp, opp.faceRight ? 1 : -1);
+                        else me.hp = serverMeHp; 
+                        updateUI();
+                    }
+                    if (serverOppHp !== undefined && serverOppHp !== opp.hp) {
+                        if (serverOppHp < opp.hp) opp.takeDmg(opp.hp - serverOppHp, me.faceRight ? 1 : -1);
+                        else opp.hp = serverOppHp;
+                        updateUI();
+                    }
+
+                    if (!isHost) {
+                        if (data.p1Score !== undefined) p1Score = data.p1Score;
+                        if (data.p2Score !== undefined) p2Score = data.p2Score;
+                        if (data.currentRound !== undefined) currentRound = data.currentRound;
+                        
+                        document.getElementById('p1-score').innerText = p1Score;
+                        document.getElementById('p2-score').innerText = p2Score;
+                        
+                        if (data.timer !== undefined && Math.abs(timer - data.timer) > 1) {
+                            timer = data.timer; document.getElementById('timer').innerText = timer;
+                        }
+                    }
                 }
             }
         }, e=>{});
@@ -668,16 +707,28 @@
     }
 
     function startRound() {
-        p1.hp = 100; p2.hp = 100;
+        let startHp = extratime ? 1 : 100;
+        p1.hp = startHp; p2.hp = startHp;
         p1.pos.x = 200; p2.pos.x = 700;
         p1.vel = {x:0, y:0}; p2.vel = {x:0, y:0};
         p1.isAtk = false; p2.isAtk = false;
         
-        if(extratime) { p1.hp = 1; p2.hp = 1; timer = 20; }
+        if(extratime) { timer = 20; }
         else { timer = 60; extratime = false; }
+        document.getElementById('timer').innerText = timer;
         
         isRoundTransition = false;
         updateUI();
+        
+        // Host chịu trách nhiệm khởi tạo lại Máu và Trạng thái ván lên Máy chủ
+        if (isHost && (gameState === 'playing_ranked' || gameState === 'playing_normal')) {
+            const roomRef = getPublicDocPath('rooms', currentRoomId);
+            updateDoc(roomRef, { 
+                p1hp: startHp, p2hp: startHp, 
+                p1Score: p1Score, p2Score: p2Score, 
+                currentRound: currentRound, timer: timer 
+            }).catch(e=>{});
+        }
         
         let rMsg = extratime ? "HIỆP PHỤ!" : (matchMode === 'ranked' ? `HIỆP ${currentRound}` : "BẮT ĐẦU!");
         showRoundMsg(rMsg, 1500);
@@ -726,11 +777,19 @@
                 me.attack();
                 if(me.attackBox.pos.x + me.attackBox.w >= opp.pos.x && me.attackBox.pos.x <= opp.pos.x + opp.w &&
                    me.attackBox.pos.y + me.attackBox.h >= opp.pos.y && me.attackBox.pos.y <= opp.pos.y + opp.h) {
+                    
                     opp.takeDmg(me.sword.damage, me.faceRight ? 1 : -1);
                     updateQuest('damage', me.sword.damage);
                     updateUI();
                     
-                    // Simple Bot AI for Practice (bot respawns automatically on death in checkRoundEnd)
+                    // CẬP NHẬT MÁU TRỰC TIẾP LÊN MÁY CHỦ KHI TRÚNG ĐÒN
+                    if(gameState === 'playing_ranked' || gameState === 'playing_normal') {
+                        const roomRef = getPublicDocPath('rooms', currentRoomId);
+                        let updateObj = {};
+                        updateObj[isHost ? 'p2hp' : 'p1hp'] = opp.hp;
+                        updateDoc(roomRef, updateObj).catch(e=>{});
+                    }
+                    
                     if(gameState === 'playing_practice') { updateQuest('practice', 1); }
                 }
             }
