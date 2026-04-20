@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Đấu Trường Sinh Tử - Mobile/Online</title>
+    <title>Death Arena - Mobile/Online</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
@@ -49,10 +49,11 @@
         #round-score { position: absolute; top: 60px; font-size: 20px; color: white; text-shadow: 2px 2px 0 #000; z-index: 10; display: none; }
         #round-msg { position: absolute; font-size: 35px; color: #ecc94b; text-shadow: 3px 3px 0 #000; text-align: center; display: none; z-index: 20; }
 
+        /* Moved mobile controls up */
         #mobile-controls {
             display: none;
-            position: absolute; bottom: 20px; left: 0; width: 100%;
-            padding: 0 20px; box-sizing: border-box;
+            position: absolute; bottom: 80px; left: 0; width: 100%;
+            padding: 0 30px; box-sizing: border-box;
             justify-content: space-between; z-index: 50; pointer-events: auto;
         }
 
@@ -74,7 +75,11 @@
         .panel { background: rgba(31, 41, 55, 0.9); border: 2px solid #374151; border-radius: 10px; padding: 15px; display: flex; flex-direction: column; }
         
         .left-col, .right-col { flex: 1; display: flex; flex-direction: column; gap: 10px; min-width: 300px; }
-        #chat-box, #leaderboard-list { flex: 1; overflow-y: auto; background: #111827; padding: 10px; border-radius: 5px; font-size: 14px; min-height: 150px; }
+        
+        /* Fixed Chat box expanding issue */
+        #chat-box { flex: none; height: 150px; overflow-y: auto; background: #111827; padding: 10px; border-radius: 5px; font-size: 14px; }
+        #leaderboard-list { flex: 1; overflow-y: auto; background: #111827; padding: 10px; border-radius: 5px; font-size: 14px; min-height: 150px; }
+        
         .center-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; min-width: 300px; }
         
         .shop-item, .quest-item { background: #374151; padding: 10px; border-radius: 5px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;}
@@ -83,9 +88,10 @@
         .btn-primary { background: #3b82f6; color: white; }
         .btn-danger { background: #ef4444; color: white; }
         .btn-success { background: #10b981; color: white; }
+        .btn-info { background: #0ea5e9; color: white; }
         .btn-disabled { background: #6b7280; color: #d1d5db; cursor: not-allowed; }
 
-        #name-modal, #loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #111827; display: flex; justify-content: center; align-items: center; z-index: 200; flex-direction: column; }
+        #name-modal, #loading-overlay, #rank-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(17,24,39,0.9); display: flex; justify-content: center; align-items: center; z-index: 200; flex-direction: column; }
         .loader { border: 5px solid #f3f3f3; border-top: 5px solid #3b82f6; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
@@ -98,30 +104,40 @@
 
     <div id="loading-overlay">
         <div class="loader"></div>
-        <h2 class="pixel-font mt-4 text-xl text-center px-4">ĐANG KẾT NỐI MÁY CHỦ...</h2>
-        <p class="mt-2 text-gray-400 text-sm text-center px-4">Vui lòng đợi cấu hình Firebase</p>
+        <h2 class="pixel-font mt-4 text-xl text-center px-4">CONNECTING TO SERVER...</h2>
+        <p class="mt-2 text-gray-400 text-sm text-center px-4">Please wait for Firebase config</p>
     </div>
 
     <div id="name-modal" style="display: none;">
         <div class="bg-gray-800 p-6 mx-4 rounded-lg text-center border-2 border-blue-500 w-full max-w-sm">
-            <h2 class="pixel-font text-xl mb-4 text-blue-400">TẠO NHÂN VẬT</h2>
-            <input type="text" id="player-name-input" placeholder="Nhập tên của bạn..." class="w-full p-3 bg-gray-900 border border-gray-600 rounded text-white mb-4 outline-none focus:border-blue-500" maxlength="15">
-            <button onclick="saveName()" class="btn btn-primary w-full pixel-font">VÀO GAME</button>
+            <h2 class="pixel-font text-xl mb-4 text-blue-400">CREATE CHARACTER</h2>
+            <input type="text" id="player-name-input" placeholder="Enter your name..." class="w-full p-3 bg-gray-900 border border-gray-600 rounded text-white mb-4 outline-none focus:border-blue-500" maxlength="15">
+            <button onclick="saveName()" class="btn btn-primary w-full pixel-font">ENTER GAME</button>
+        </div>
+    </div>
+
+    <div id="rank-modal" style="display: none;">
+        <div class="bg-gray-800 p-6 rounded-lg max-w-sm w-full mx-4 border border-gray-600">
+            <h2 class="pixel-font text-xl text-yellow-400 mb-4 text-center">RANK TIERS</h2>
+            <div id="rank-list-content" class="flex flex-col gap-2 mb-6"></div>
+            <button onclick="document.getElementById('rank-modal').style.display='none'" class="btn btn-primary w-full">CLOSE</button>
         </div>
     </div>
 
     <div id="dashboard" style="display: none;">
         <div class="center-col panel order-first md:order-none w-full">
-            <h1 class="pixel-font text-2xl md:text-4xl text-red-500 mb-2 drop-shadow-lg">ĐẤU TRƯỜNG</h1>
-            <h1 class="pixel-font text-2xl md:text-4xl text-white mb-6 drop-shadow-lg">SINH TỬ</h1>
+            <h1 class="pixel-font text-2xl md:text-4xl text-red-500 mb-2 drop-shadow-lg">DEATH</h1>
+            <h1 class="pixel-font text-2xl md:text-4xl text-white mb-6 drop-shadow-lg">ARENA</h1>
             
             <div class="bg-gray-900 p-4 rounded-lg border border-gray-700 w-full max-w-sm mb-6">
                 <div class="flex justify-between items-center mb-2">
                     <span class="text-lg font-bold" id="ui-player-name">...</span>
                 </div>
                 <div class="flex justify-between items-center mb-1">
-                    <span class="text-gray-400 text-sm">Rank:</span>
-                    <span id="ui-rank-name" class="font-bold text-yellow-400">Đồng</span>
+                    <span class="text-gray-400 text-sm flex items-center gap-2">Rank: 
+                        <button onclick="document.getElementById('rank-modal').style.display='flex'" class="text-xs bg-gray-700 hover:bg-gray-600 rounded-full w-5 h-5 flex items-center justify-center text-white cursor-pointer border border-gray-500">i</button>
+                    </span>
+                    <span id="ui-rank-name" class="font-bold text-yellow-400">Bronze</span>
                 </div>
                 <div class="w-full bg-gray-800 rounded-full h-2 mb-1">
                     <div id="ui-rank-progress" class="bg-yellow-400 h-2 rounded-full" style="width: 0%"></div>
@@ -129,27 +145,26 @@
                 <div class="text-right text-xs text-gray-400"><span id="ui-rp">0</span> RP</div>
             </div>
 
-            <!-- Các nút Chọn Chế Độ -->
             <div class="flex gap-2 w-full max-w-sm mb-3">
-                <button onclick="startMatchmaking('normal')" class="btn-match btn btn-primary flex-1 py-3 text-sm pixel-font leading-tight">⚔️ ĐẤU<br>THƯỜNG</button>
-                <button onclick="startMatchmaking('ranked')" class="btn-match btn btn-danger flex-1 py-3 text-sm pixel-font leading-tight">🏆 ĐẤU<br>HẠNG</button>
+                <button onclick="startMatchmaking('normal')" class="btn-match btn btn-primary flex-1 py-3 text-sm pixel-font leading-tight">⚔️ NORMAL<br>MATCH</button>
+                <button onclick="startMatchmaking('ranked')" class="btn-match btn btn-danger flex-1 py-3 text-sm pixel-font leading-tight">🏆 RANKED<br>MATCH</button>
             </div>
-            <button onclick="startPractice()" class="btn-match btn btn-success w-full max-w-sm py-2 text-md mb-3">🎯 LUYỆN TẬP (BOT)</button>
+            <button onclick="startPractice()" class="btn-match btn btn-success w-full max-w-sm py-2 text-md mb-3">🎯 PRACTICE (BOT)</button>
             
-            <div id="matchmaking-status" class="text-yellow-400 animate-pulse mt-2 hidden">Đang tìm đối thủ... <button onclick="cancelMatchmaking()" class="ml-2 text-red-400 underline cursor-pointer border-none bg-transparent">Hủy</button></div>
+            <div id="matchmaking-status" class="text-yellow-400 animate-pulse mt-2 hidden">Searching for opponent... <button onclick="cancelMatchmaking()" class="ml-2 text-red-400 underline cursor-pointer border-none bg-transparent">Cancel</button></div>
         </div>
 
         <div class="left-col w-full md:w-auto">
             <div class="panel flex-1 min-h-[250px]">
-                <h3 class="text-md font-bold mb-2 text-yellow-400 border-b border-gray-600 pb-2">💬 Kênh Thế Giới</h3>
+                <h3 class="text-md font-bold mb-2 text-yellow-400 border-b border-gray-600 pb-2">💬 World Chat</h3>
                 <div id="chat-box" class="flex flex-col gap-2"></div>
                 <div class="flex gap-2 mt-2">
                     <input type="text" id="chat-input" class="flex-1 bg-gray-900 p-2 rounded border border-gray-600 text-white outline-none text-sm" placeholder="Chat..." onkeypress="if(event.key === 'Enter') sendChat()">
-                    <button onclick="sendChat()" class="btn btn-primary px-3 text-sm">Gửi</button>
+                    <button onclick="sendChat()" class="btn btn-primary px-3 text-sm">Send</button>
                 </div>
             </div>
             <div class="panel flex-1 min-h-[200px]">
-                <h3 class="text-md font-bold mb-2 text-blue-400 border-b border-gray-600 pb-2">🏆 Bảng Xếp Hạng</h3>
+                <h3 class="text-md font-bold mb-2 text-blue-400 border-b border-gray-600 pb-2">🏆 Leaderboard</h3>
                 <div id="leaderboard-list" class="flex flex-col gap-2"></div>
             </div>
         </div>
@@ -157,23 +172,29 @@
         <div class="right-col w-full md:w-auto">
             <div class="panel flex-1 min-h-[200px]">
                 <div class="flex justify-between items-center border-b border-gray-600 pb-2 mb-2">
-                    <h3 class="text-md font-bold text-green-400">📜 Nhiệm Vụ</h3>
+                    <h3 class="text-md font-bold text-green-400">📜 Quests</h3>
                     <span class="text-yellow-400 font-bold font-mono">💰 <span id="ui-gold">0</span></span>
                 </div>
                 <div id="quest-list" class="overflow-y-auto flex-1"></div>
-                <button onclick="generateQuests()" class="btn btn-primary mt-2 text-xs">Làm mới NV</button>
+                <button onclick="generateQuests()" class="btn btn-primary mt-2 text-xs">Refresh</button>
             </div>
-            <div class="panel flex-1 min-h-[250px]">
-                <h3 class="text-md font-bold text-purple-400 border-b border-gray-600 pb-2 mb-2">🗡️ Cửa Hàng</h3>
-                <div id="shop-list" class="overflow-y-auto flex-1"></div>
+            <div class="panel flex-1 min-h-[300px]">
+                <h3 class="text-md font-bold text-purple-400 border-b border-gray-600 pb-2 mb-2">🛒 Shop</h3>
+                <div id="shop-list" class="overflow-y-auto flex-1 h-[250px] pr-2"></div>
             </div>
         </div>
     </div>
 
-    <!-- GIAO DIỆN GAME -->
+    <!-- GAME VIEW -->
     <div id="game-view">
-        <button onclick="exitGame()" class="absolute top-2 left-2 md:top-5 md:left-5 btn btn-danger z-50 text-xs px-2 py-1">Thoát</button>
+        <button onclick="exitGame()" class="absolute top-2 left-2 md:top-5 md:left-5 btn btn-danger z-50 text-xs px-2 py-1">Exit</button>
         
+        <div id="controls-guide" class="absolute top-2 right-2 md:top-5 md:right-5 text-xs md:text-sm text-gray-400 text-right pointer-events-none z-50 bg-black bg-opacity-50 p-2 rounded border border-gray-700">
+            [A/D] Move | [W] Jump | [SPACE] Attack<br>
+            [1] 🛡️ Shield | [2] 🌫️ Smoke Block<br>
+            <span class="text-green-400 text-[10px]">❤️ Revive is Passive</span>
+        </div>
+
         <div class="game-ui-layer">
             <div id="round-score" class="pixel-font">
                 <span id="p1-score" class="text-blue-400">0</span> - <span id="p2-score" class="text-red-400">0</span>
@@ -192,12 +213,25 @@
             </div>
             <div id="timer" class="pixel-font">60</div>
             <div id="match-msg" class="pixel-font"></div>
-            <div id="round-msg" class="pixel-font">HIỆP 1</div>
+            <div id="round-msg" class="pixel-font">ROUND 1</div>
         </div>
         
         <canvas id="gameCanvas" width="1024" height="576"></canvas>
 
-        <button id="skip-btn" onclick="exitGame()" class="absolute bottom-32 left-1/2 transform -translate-x-1/2 btn btn-primary z-50 pixel-font text-lg md:text-xl" style="display: none; padding: 15px 30px;">BỎ QUA (5s)</button>
+        <button id="skip-btn" onclick="exitGame()" class="absolute bottom-32 left-1/2 transform -translate-x-1/2 btn btn-primary z-50 pixel-font text-lg md:text-xl" style="display: none; padding: 15px 30px;">SKIP (5s)</button>
+
+        <!-- ITEM BUTTONS IN GAME -->
+        <div id="item-controls" class="absolute bottom-32 md:bottom-10 left-5 flex gap-2 z-50 pointer-events-auto">
+            <button class="btn btn-info p-2 px-3 text-sm flex flex-col items-center border border-blue-400" onclick="useItem('shield')">
+                <span>🛡️</span> <span id="ui-cnt-shield" class="text-xs font-mono">0</span>
+            </button>
+            <button class="btn btn-primary p-2 px-3 text-sm flex flex-col items-center border border-gray-400 bg-gray-700" onclick="useItem('smoke')">
+                <span>🌫️</span> <span id="ui-cnt-smoke" class="text-xs font-mono">0</span>
+            </button>
+            <div class="btn btn-disabled p-2 px-3 text-sm flex flex-col items-center opacity-80" title="Passive Auto Use">
+                <span>❤️</span> <span id="ui-cnt-revive" class="text-xs font-mono">0</span>
+            </div>
+        </div>
 
         <div id="mobile-controls">
             <div class="ctrl-group">
@@ -214,13 +248,13 @@
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
     import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-    import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, addDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, addDoc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
     // ==========================================
-    // CẤU HÌNH FIREBASE Ở ĐÂY
+    // FIREBASE CONFIG
     // ==========================================
     const myCustomFirebaseConfig = {
-        // Nhập cấu hình của bạn vào đây (Bỏ comment // đi)
+        // Your config goes here
         apiKey: "AIzaSyDx5864sZLFO9bc53c1NXVajpsnDmJATt0",
         authDomain: "dautruongsinhtu-1f918.firebaseapp.com",
         projectId: "dautruongsinhtu-1f918",
@@ -239,44 +273,63 @@
         app = initializeApp(finalConfig);
         auth = getAuth(app);
         db = getFirestore(app);
-    } catch (e) { console.error("Lỗi Firebase. Sẽ chạy Offline LocalStorage.", e); }
+    } catch (e) { console.error("Firebase Error. Running Offline LocalStorage.", e); }
 
     // ==========================================
     // DATA & STATE
     // ==========================================
     const SWORDS = {
-        wood: { id: 'wood', name: 'Kiếm Gỗ', damage: 5, cost: 0, color: '#a1662f', width: 50 },
-        iron: { id: 'iron', name: 'Kiếm Sắt', damage: 10, cost: 100, color: '#cbd5e0', width: 60 },
-        blood: { id: 'blood', name: 'Huyết Kiếm', damage: 15, cost: 500, color: '#e53e3e', width: 70 },
-        holy: { id: 'holy', name: 'Thánh Kiếm', damage: 25, cost: 1500, color: '#ecc94b', width: 80 }
+        wood: { id: 'wood', name: 'Wooden Sword', damage: 5, cost: 0, color: '#a1662f', width: 50 },
+        iron: { id: 'iron', name: 'Iron Sword', damage: 10, cost: 100, color: '#cbd5e0', width: 60 },
+        blood: { id: 'blood', name: 'Blood Sword', damage: 15, cost: 500, color: '#e53e3e', width: 70 },
+        holy: { id: 'holy', name: 'Holy Sword', damage: 25, cost: 1500, color: '#ecc94b', width: 80 },
+        shadow: { id: 'shadow', name: 'Shadow Blade', damage: 35, cost: 3000, color: '#7c3aed', width: 90 },
+        divine: { id: 'divine', name: 'Divine Slayer', damage: 50, cost: 8000, color: '#06b6d4', width: 100 }
     };
+    
+    const ITEMS = {
+        shield: { id: 'shield', name: '🛡️ Shield', cost: 50, desc: 'Immunity for 3s (Active)' },
+        smoke: { id: 'smoke', name: '🌫️ Smoke Block', cost: 30, desc: 'Block vision for 5s (Active)' },
+        revive: { id: 'revive', name: '❤️ Revive', cost: 200, desc: 'Auto +50 HP on death (Passive)' }
+    };
+
     const RANKS = [
-        { name: 'Đồng', minRP: 0, color: '#b08d57' }, { name: 'Bạc', minRP: 100, color: '#c0c0c0' },
-        { name: 'Vàng', minRP: 300, color: '#ffd700' }, { name: 'Bạch Kim', minRP: 600, color: '#e5e4e2' },
-        { name: 'Kim Cương', minRP: 1000, color: '#b9f2ff' }, { name: 'Thách Đấu', minRP: 1500, color: '#ff4b4b' }
+        { name: 'Bronze', minRP: 0, color: '#b08d57' }, { name: 'Silver', minRP: 100, color: '#c0c0c0' },
+        { name: 'Gold', minRP: 300, color: '#ffd700' }, { name: 'Platinum', minRP: 600, color: '#e5e4e2' },
+        { name: 'Diamond', minRP: 1000, color: '#b9f2ff' }, { name: 'Challenger', minRP: 1500, color: '#ff4b4b' }
+    ];
+
+    const ALL_QUESTS = [
+        { type: 'play', desc: 'Play 1 match', target: 1, reward: 50 },
+        { type: 'play3', desc: 'Play 3 matches', target: 3, reward: 150 },
+        { type: 'win', desc: 'Win 1 match', target: 1, reward: 100 },
+        { type: 'win3', desc: 'Win 3 matches', target: 3, reward: 300 },
+        { type: 'damage', desc: 'Deal 500 DMG', target: 500, reward: 100 },
+        { type: 'damage1k', desc: 'Deal 1000 DMG', target: 1000, reward: 250 },
+        { type: 'buy', desc: 'Buy any item/sword', target: 1, reward: 50 }
     ];
 
     let currentUser = null;
-    let myProfile = { name: '', rp: 0, gold: 0, sword: 'wood', quests: [], ownedSwords: ['wood'] };
+    let myProfile = { name: '', rp: 0, gold: 0, sword: 'wood', quests: [], ownedSwords: ['wood'], inventory: { shield: 2, smoke: 0, revive: 0 } };
     let gameState = 'dashboard'; 
     let currentRoomId = null;
     let isHost = true;
     let unsubs = [];
     let isFirebaseReady = false;
 
-    // Biến cho Chế Độ Đấu (Ranked/Normal/Practice)
     let matchMode = 'normal'; 
     let winTarget = 1;
     let p1Score = 0, p2Score = 0, currentRound = 1;
     let extratime = false, isRoundTransition = false, isWinProcessed = false;
-    let skipInterval;
+    let skipInterval, queuePingInterval = null;
+    let lastSmokeTs = 0;
 
     const getPublicPath = (col) => collection(db, 'artifacts', appId, 'public', 'data', col);
     const getPublicDocPath = (col, docId) => doc(db, 'artifacts', appId, 'public', 'data', col, docId);
     const getPrivateDocPath = (col, docId) => doc(db, 'artifacts', appId, 'users', currentUser.uid, col, docId);
 
     // ==========================================
-    // KHỞI TẠO HỆ THỐNG
+    // INITIALIZATION
     // ==========================================
     if (auth) {
         const initAuth = async () => {
@@ -284,7 +337,7 @@
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                     await signInWithCustomToken(auth, __initial_auth_token);
                 } else { await signInAnonymously(auth); }
-            } catch (err) { console.error("Lỗi đăng nhập:", err); initLocal(); }
+            } catch (err) { console.error("Login Error:", err); initLocal(); }
         };
         initAuth();
 
@@ -296,6 +349,7 @@
                     if (docSnap.exists()) {
                         myProfile = docSnap.data();
                         if(!myProfile.ownedSwords) myProfile.ownedSwords = ['wood'];
+                        if(!myProfile.inventory) myProfile.inventory = { shield: 2, smoke: 0, revive: 0 };
                         showDashboard(); setupRealtimeListeners();
                     } else { showNameModal(); }
                 } catch(e) { showNameModal(); }
@@ -306,7 +360,11 @@
     function initLocal() {
         isFirebaseReady = false;
         const saved = localStorage.getItem('dt_profile_offline');
-        if (saved) { myProfile = JSON.parse(saved); showDashboard(); setupMockData(); } 
+        if (saved) { 
+            myProfile = JSON.parse(saved); 
+            if(!myProfile.inventory) myProfile.inventory = { shield: 2, smoke: 0, revive: 0 };
+            showDashboard(); setupMockData(); 
+        } 
         else { showNameModal(); }
     }
 
@@ -319,6 +377,15 @@
         document.getElementById('loading-overlay').style.display = 'none';
         document.getElementById('name-modal').style.display = 'none';
         document.getElementById('dashboard').style.display = 'flex';
+        
+        // Fill Rank modal list once
+        document.getElementById('rank-list-content').innerHTML = RANKS.map(r => 
+            `<div class="flex justify-between items-center p-2 border-b border-gray-700">
+                <span style="color: ${r.color}" class="font-bold">${r.name}</span>
+                <span class="text-sm text-gray-400">${r.minRP} RP</span>
+            </div>`
+        ).join('');
+
         updateDashboardUI();
     }
 
@@ -353,7 +420,7 @@
     }
 
     // ==========================================
-    // CẬP NHẬT GIAO DIỆN (UI)
+    // UI UPDATES
     // ==========================================
     function updateDashboardUI() {
         document.getElementById('ui-player-name').innerText = myProfile.name;
@@ -372,7 +439,14 @@
         document.getElementById('ui-rank-progress').style.width = `${Math.max(0, Math.min(100, prog))}%`;
         document.getElementById('ui-rank-progress').style.backgroundColor = currentRank.color;
 
-        renderShop(); renderQuests();
+        renderShop(); renderQuests(); updateItemUI();
+    }
+
+    function updateItemUI() {
+        if(!myProfile.inventory) return;
+        document.getElementById('ui-cnt-shield').innerText = myProfile.inventory.shield;
+        document.getElementById('ui-cnt-smoke').innerText = myProfile.inventory.smoke;
+        document.getElementById('ui-cnt-revive').innerText = myProfile.inventory.revive;
     }
 
     function setupRealtimeListeners() {
@@ -396,12 +470,14 @@
         const lbList = document.getElementById('leaderboard-list');
         lbList.innerHTML = '';
         users.slice(0, 50).forEach((u, i) => {
-            let rankC = RANKS.reduce((acc, r) => u.rp >= r.minRP ? r.color : acc, RANKS[0].color);
+            let rankObj = RANKS.slice().reverse().find(r => (u.rp||0) >= r.minRP) || RANKS[0];
             let isMe = isFirebaseReady ? (u.uid === currentUser?.uid) : (u.name === myProfile.name);
             lbList.innerHTML += `<div class="flex justify-between items-center py-1 border-b border-gray-800">
                 <span class="text-gray-400 w-6 text-xs">${i + 1}.</span>
-                <span class="flex-1 truncate text-xs ${isMe ? 'text-white font-bold' : 'text-gray-300'}">${u.name}</span>
-                <span class="font-mono text-xs" style="color: ${rankC}">${u.rp || 0} RP</span></div>`;
+                <span class="flex-1 truncate text-xs ${isMe ? 'text-white font-bold' : 'text-gray-300'}">
+                    <span style="color: ${rankObj.color}">[${rankObj.name}]</span> ${u.name}
+                </span>
+                <span class="font-mono text-xs" style="color: ${rankObj.color}">${u.rp || 0} RP</span></div>`;
         });
     }
 
@@ -414,7 +490,7 @@
         chatBox.scrollTop = chatBox.scrollHeight;
     }
 
-    let mockChat = [{name: "Hệ thống", text: "Bạn đang chơi ở chế độ Offline Local!"}];
+    let mockChat = [{name: "System", text: "You are playing Offline Local Mode!"}];
     let mockLb = [{name: "Faker", rp: 2500}, {name: "SofM", rp: 1800}];
     function setupMockData() {
         if(isFirebaseReady) return;
@@ -434,16 +510,16 @@
     }
 
     function generateNewQuestsLocal() {
-        const types = [ { type: 'play', desc: 'Chơi 1 trận', target: 1, reward: 50 }, { type: 'win', desc: 'Thắng 1 trận', target: 1, reward: 100 }, { type: 'damage', desc: 'Gây 500 ST', target: 500, reward: 100 } ];
-        myProfile.quests = types.map(q => ({...q, current: 0, claimed: false}));
+        let shuffled = ALL_QUESTS.sort(() => 0.5 - Math.random());
+        myProfile.quests = shuffled.slice(0, 3).map(q => ({...q, current: 0, claimed: false}));
     }
     window.generateQuests = () => { generateNewQuestsLocal(); saveProfileData(); }
 
     function renderQuests() {
         document.getElementById('quest-list').innerHTML = myProfile.quests.map((q, i) => {
             let prog = Math.min(q.current, q.target);
-            let btn = q.claimed ? `<span class="text-green-500 text-xs">Xong</span>` : 
-                     (prog >= q.target ? `<button onclick="claimQuest(${i})" class="btn btn-success text-xs p-1">Nhận ${q.reward}G</button>` : 
+            let btn = q.claimed ? `<span class="text-green-500 text-xs">Done</span>` : 
+                     (prog >= q.target ? `<button onclick="claimQuest(${i})" class="btn btn-success text-xs p-1">Claim ${q.reward}G</button>` : 
                      `<span class="text-gray-400 text-xs">${prog}/${q.target}</span>`);
             return `<div class="quest-item"><div class="text-xs mb-1">${q.desc}</div><div class="flex justify-between items-center"><div class="w-2/3 bg-gray-700 h-1"><div class="bg-blue-400 h-1" style="width: ${(prog/q.target)*100}%"></div></div>${btn}</div></div>`;
         }).join('');
@@ -457,26 +533,41 @@
     }
 
     function renderShop() {
-        document.getElementById('shop-list').innerHTML = Object.values(SWORDS).map(s => {
+        let wHtml = Object.values(SWORDS).map(s => {
             const isEq = myProfile.sword === s.id;
             const isOw = myProfile.ownedSwords.includes(s.id);
             const canBuy = myProfile.gold >= s.cost;
-            let btn = isEq ? `<button class="btn btn-disabled text-xs p-1">Đang Dùng</button>` :
-                      isOw ? `<button onclick="equip('${s.id}')" class="btn btn-primary text-xs p-1">Trang Bị</button>` :
-                      `<button onclick="buy('${s.id}')" class="btn ${canBuy?'btn-success':'btn-disabled'} text-xs p-1">${s.cost} G</button>`;
-            return `<div class="shop-item border-l-4" style="border-color: ${s.color}"><div><div class="font-bold text-xs" style="color: ${s.color}">${s.name}</div></div>${btn}</div>`;
+            let btn = isEq ? `<button class="btn btn-disabled text-xs p-1">Equipped</button>` :
+                      isOw ? `<button onclick="equip('${s.id}')" class="btn btn-primary text-xs p-1">Equip</button>` :
+                      `<button onclick="buySword('${s.id}')" class="btn ${canBuy?'btn-success':'btn-disabled'} text-xs p-1">${s.cost} G</button>`;
+            return `<div class="shop-item border-l-4" style="border-color: ${s.color}">
+                        <div><div class="font-bold text-xs" style="color: ${s.color}">${s.name}</div><div class="text-[10px] text-gray-400">DMG: ${s.damage} | W: ${s.width}</div></div>${btn}
+                    </div>`;
         }).join('');
+
+        let iHtml = Object.values(ITEMS).map(itm => {
+            const canBuy = myProfile.gold >= itm.cost;
+            let btn = `<button onclick="buyItem('${itm.id}')" class="btn ${canBuy?'btn-success':'btn-disabled'} text-xs p-1">${itm.cost} G</button>`;
+            return `<div class="shop-item border-l-4 border-gray-400">
+                        <div><div class="font-bold text-xs text-gray-200">${itm.name} <span class="text-[10px] text-yellow-400">(Own: ${myProfile.inventory[itm.id]})</span></div><div class="text-[10px] text-gray-400">${itm.desc}</div></div>${btn}
+                    </div>`;
+        }).join('');
+
+        document.getElementById('shop-list').innerHTML = 
+            `<div class="text-gray-400 text-xs mb-1 font-bold">WEAPONS</div>` + wHtml + 
+            `<div class="text-gray-400 text-xs mt-3 mb-1 font-bold">CONSUMABLES</div>` + iHtml;
     }
+    
     window.equip = (id) => { myProfile.sword = id; saveProfileData(); }
-    window.buy = (id) => { if(myProfile.gold >= SWORDS[id].cost) { myProfile.gold -= SWORDS[id].cost; myProfile.ownedSwords.push(id); myProfile.sword = id; saveProfileData(); } }
+    window.buySword = (id) => { if(myProfile.gold >= SWORDS[id].cost) { myProfile.gold -= SWORDS[id].cost; myProfile.ownedSwords.push(id); myProfile.sword = id; updateQuest('buy', 1); saveProfileData(); } }
+    window.buyItem = (id) => { if(myProfile.gold >= ITEMS[id].cost) { myProfile.gold -= ITEMS[id].cost; myProfile.inventory[id]++; updateQuest('buy', 1); saveProfileData(); } }
 
     // ==========================================
     // CORE GAME LOGIC
     // ==========================================
     const canvasEl = document.getElementById('gameCanvas');
     const ctx = canvasEl.getContext('2d');
-    let p1, p2, loopId, particles = [], timer = 60, timerId, gameEnded = false;
-    let roomUnsub = null, syncInterval = null;
+    let p1, p2, loopId, particles = [], smokes = [], timer = 60, timerId, gameEnded = false;
 
     const keys = { left: false, right: false, up: false, attack: false };
 
@@ -489,11 +580,25 @@
             this.isAtk = false; this.hp = 100; this.faceRight = faceRight;
             this.cd = false; this.flicker = 0; this.sAngle = 0;
             this.isLocal = isLocal; this.targetX = x; this.targetY = 0;
+            this.shieldTime = 0;
         }
         draw() {
             ctx.fillStyle = this.flicker > 0 ? 'white' : this.color;
             if(this.flicker>0) this.flicker--;
             ctx.fillRect(this.pos.x, this.pos.y, this.w, this.h);
+            
+            // Shield Effect
+            if(this.shieldTime > 0) {
+                ctx.beginPath();
+                ctx.arc(this.pos.x + this.w/2, this.pos.y + this.h/2, 75, 0, Math.PI*2);
+                ctx.fillStyle = 'rgba(14, 165, 233, 0.2)';
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(14, 165, 233, 0.8)';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+                this.shieldTime--;
+            }
+
             ctx.save();
             ctx.translate(this.pos.x + this.w/2, this.pos.y + this.h/2);
             let tAng = this.isAtk ? (this.faceRight ? 1.5 : -1.5) : (this.faceRight ? -0.5 : 0.5);
@@ -529,11 +634,50 @@
         }
         takeDmg(amt, dir) {
             if(this.hp <= 0 || isRoundTransition) return;
-            this.hp = Math.max(0, this.hp - amt);
+            if(this.shieldTime > 0) return; // Shield blocks dmg
+
+            this.hp -= amt;
             this.flicker = 10;
+            
+            // Passive Revive Logic
+            if(this.hp <= 0 && this.isLocal && myProfile.inventory.revive > 0) {
+                this.hp = 50;
+                myProfile.inventory.revive--;
+                saveProfileData(); updateItemUI();
+                for(let i=0;i<20;i++) particles.push({ x: this.pos.x+25, y: this.pos.y+60, vx: (Math.random()-0.5)*10, vy: (Math.random()-0.5)*10, r: Math.random()*5+2, c: '#10b981', a: 1 });
+            }
+
+            this.hp = Math.max(0, this.hp);
+
             if(this.isLocal || gameState === 'playing_practice') { this.vel.x = dir * 15; this.vel.y = -5; }
             for(let i=0;i<10;i++) particles.push({ x: this.pos.x+25, y: this.pos.y+60, vx: (Math.random()-0.5)*15, vy: (Math.random()-0.5)*15, r: Math.random()*3+1, c: Math.random()>0.5?this.color:'#fff', a: 1 });
         }
+    }
+
+    // --- ITEMS USAGE ---
+    window.useItem = (type) => {
+        if(gameState === 'dashboard' || gameEnded || isRoundTransition) return;
+        let me = (gameState==='playing_practice' || isHost) ? p1 : p2;
+        if(me.hp <= 0) return;
+
+        if(myProfile.inventory[type] > 0) {
+            myProfile.inventory[type]--;
+            saveProfileData(); updateItemUI();
+            
+            if(type === 'shield') {
+                me.shieldTime = 180; // 3 secs
+            } else if(type === 'smoke') {
+                spawnSmoke(me.pos.x);
+                if(gameState !== 'playing_practice') {
+                    const roomRef = getPublicDocPath('rooms', currentRoomId);
+                    updateDoc(roomRef, { newSmoke: {x: me.pos.x, ts: Date.now()} }).catch(e=>{});
+                }
+            }
+        }
+    }
+
+    function spawnSmoke(x) {
+        smokes.push({x: x - 150, y: 0, w: 350, h: 576, time: 300}); // 5 secs
     }
 
     // --- MOBILE CONTROLS ---
@@ -556,13 +700,13 @@
 
     window.addEventListener('keydown', e => {
         if(gameState === 'dashboard' || gameEnded || isRoundTransition) return;
+        let me = (gameState==='playing_practice' || isHost) ? p1 : p2;
         if(e.key.toLowerCase()==='a') keys.left = true;
         if(e.key.toLowerCase()==='d') keys.right = true;
-        if(e.key.toLowerCase()==='w') {
-            let me = (gameState==='playing_practice' || isHost) ? p1 : p2;
-            if (me.vel.y === 0) me.vel.y = -15;
-        }
+        if(e.key.toLowerCase()==='w' && me.vel.y === 0) me.vel.y = -15;
         if(e.code==='Space') { keys.attack = true; e.preventDefault(); }
+        if(e.key === '1') useItem('shield');
+        if(e.key === '2') useItem('smoke');
     });
     window.addEventListener('keyup', e => {
         if(e.key.toLowerCase()==='a') keys.left = false;
@@ -576,14 +720,14 @@
         document.getElementById('dashboard').style.display = 'none';
         document.getElementById('game-view').style.display = 'flex';
         document.getElementById('game-name-p1').innerText = myProfile.name;
-        document.getElementById('game-name-p2').innerText = "Bot Luyện Tập";
+        document.getElementById('game-name-p2').innerText = "Practice Bot";
         p1 = new Fighter(200, '#3182ce', true, myProfile.sword, true);
         p2 = new Fighter(700, '#e53e3e', false, 'wood', false);
         initMatch();
     }
 
     window.startMatchmaking = async (mode) => {
-        if(!isFirebaseReady) { alert("Chưa kết nối máy chủ Firebase. Mở chế độ Luyện tập."); return startPractice(); }
+        if(!isFirebaseReady) { alert("Server not connected. Opening Practice mode."); return startPractice(); }
         matchMode = mode; winTarget = mode === 'ranked' ? 2 : 1;
         gameState = 'matchmaking';
         document.getElementById('matchmaking-status').style.display = 'block';
@@ -591,9 +735,17 @@
 
         const queueName = mode === 'ranked' ? 'ranked_queue' : 'normal_queue';
         const queueDoc = getPublicDocPath('rooms', queueName);
+        
         try {
             const docSnap = await getDoc(queueDoc);
-            if (docSnap.exists() && docSnap.data().state === 'waiting' && docSnap.data().p1 !== currentUser.uid) {
+            let isGhost = false;
+            
+            // Check Ghost Room
+            if (docSnap.exists() && docSnap.data().state === 'waiting') {
+                if (Date.now() - (docSnap.data().lastPing || 0) > 5000) isGhost = true;
+            }
+
+            if (docSnap.exists() && docSnap.data().state === 'waiting' && docSnap.data().p1 !== currentUser.uid && !isGhost) {
                 isHost = false; currentRoomId = queueName;
                 await updateDoc(queueDoc, { 
                     p2: currentUser.uid, p2Name: myProfile.name, p2Sword: myProfile.sword, state: 'playing',
@@ -604,11 +756,18 @@
                 isHost = true; currentRoomId = queueName;
                 await setDoc(queueDoc, { 
                     p1: currentUser.uid, p1Name: myProfile.name, p1Sword: myProfile.sword, state: 'waiting',
+                    lastPing: Date.now(),
                     p1hp: 100, p2hp: 100, p1Score: 0, p2Score: 0, currentRound: 1, timer: 60 
                 });
+                
+                queuePingInterval = setInterval(() => {
+                    if(gameState === 'matchmaking') updateDoc(queueDoc, { lastPing: Date.now() }).catch(e=>{});
+                }, 2000);
+
                 roomUnsub = onSnapshot(queueDoc, snap => {
-                    if(snap.exists() && snap.data().state === 'playing') {
+                    if(snap.exists() && snap.data().state === 'playing' && snap.data().p2) {
                         if(roomUnsub) roomUnsub();
+                        if(queuePingInterval) clearInterval(queuePingInterval);
                         startGameNetwork(snap.data());
                     }
                 }, e=>{});
@@ -616,12 +775,26 @@
         } catch(e) { cancelMatchmaking(); }
     }
 
-    window.cancelMatchmaking = () => {
+    window.cancelMatchmaking = async () => {
         gameState = 'dashboard';
         document.getElementById('matchmaking-status').style.display = 'none';
         document.querySelectorAll('.btn-match').forEach(b => b.disabled = false);
+        
         if(roomUnsub) roomUnsub();
+        if(queuePingInterval) clearInterval(queuePingInterval);
+
+        if (isHost && currentRoomId) {
+            const queueDoc = getPublicDocPath('rooms', currentRoomId);
+            try {
+                const snap = await getDoc(queueDoc);
+                if (snap.exists() && snap.data().p1 === currentUser.uid && snap.data().state === 'waiting') {
+                    await deleteDoc(queueDoc);
+                }
+            } catch(e){}
+        }
     }
+    
+    window.addEventListener('beforeunload', () => { if (gameState === 'matchmaking') cancelMatchmaking(); });
 
     function startGameNetwork(roomData) {
         gameState = matchMode === 'ranked' ? 'playing_ranked' : 'playing_normal';
@@ -641,8 +814,8 @@
             if(gameEnded) return;
             let me = isHost ? p1 : p2;
             let data = {};
-            data[isHost ? 'p1State' : 'p2State'] = { x: me.pos.x, y: me.pos.y, atk: me.isAtk };
-            if (isHost) data.timer = timer; // Host đồng bộ thời gian đếm ngược
+            data[isHost ? 'p1State' : 'p2State'] = { x: me.pos.x, y: me.pos.y, atk: me.isAtk, faceRight: me.faceRight, shieldTime: me.shieldTime };
+            if (isHost) data.timer = timer; 
             updateDoc(roomRef, data).catch(e=>{});
         }, 100);
 
@@ -655,10 +828,16 @@
                 let oppState = isHost ? data.p2State : data.p1State;
                 if(oppState) {
                     opp.targetX = oppState.x; opp.targetY = oppState.y;
+                    if(oppState.faceRight !== undefined) opp.faceRight = oppState.faceRight;
+                    if(oppState.shieldTime !== undefined) opp.shieldTime = oppState.shieldTime;
                     if(oppState.atk && !opp.isAtk && !isRoundTransition) opp.attack();
                 }
 
-                // CHỈ đồng bộ Máu và Tỷ số khi không nằm trong lúc chuyển giao giữa các hiệp để tránh lỗi Reset
+                if(data.newSmoke && data.newSmoke.ts !== lastSmokeTs) {
+                    lastSmokeTs = data.newSmoke.ts;
+                    spawnSmoke(data.newSmoke.x);
+                }
+
                 if (!isRoundTransition) {
                     let serverMeHp = isHost ? data.p1hp : data.p2hp;
                     let serverOppHp = isHost ? data.p2hp : data.p1hp;
@@ -695,13 +874,15 @@
 
     function initMatch() {
         p1Score = 0; p2Score = 0; currentRound = 1; extratime = false; isWinProcessed = false;
+        lastSmokeTs = 0;
         document.getElementById('p1-score').innerText = '0';
         document.getElementById('p2-score').innerText = '0';
         document.getElementById('round-score').style.display = matchMode === 'ranked' ? 'block' : 'none';
         document.getElementById('match-msg').style.display = 'none';
         document.getElementById('skip-btn').style.display = 'none';
         
-        particles = []; gameEnded = false;
+        updateItemUI();
+        particles = []; smokes = []; gameEnded = false;
         startRound();
         loop();
     }
@@ -712,6 +893,9 @@
         p1.pos.x = 200; p2.pos.x = 700;
         p1.vel = {x:0, y:0}; p2.vel = {x:0, y:0};
         p1.isAtk = false; p2.isAtk = false;
+        p1.shieldTime = 0; p2.shieldTime = 0;
+        p1.faceRight = true; p2.faceRight = false;
+        smokes = [];
         
         if(extratime) { timer = 20; }
         else { timer = 60; extratime = false; }
@@ -720,7 +904,6 @@
         isRoundTransition = false;
         updateUI();
         
-        // Host chịu trách nhiệm khởi tạo lại Máu và Trạng thái ván lên Máy chủ
         if (isHost && (gameState === 'playing_ranked' || gameState === 'playing_normal')) {
             const roomRef = getPublicDocPath('rooms', currentRoomId);
             updateDoc(roomRef, { 
@@ -730,7 +913,7 @@
             }).catch(e=>{});
         }
         
-        let rMsg = extratime ? "HIỆP PHỤ!" : (matchMode === 'ranked' ? `HIỆP ${currentRound}` : "BẮT ĐẦU!");
+        let rMsg = extratime ? "SUDDEN DEATH!" : (matchMode === 'ranked' ? `ROUND ${currentRound}` : "FIGHT!");
         showRoundMsg(rMsg, 1500);
         
         clearTimeout(timerId); loopTimer();
@@ -763,16 +946,36 @@
 
         p1.update(); p2.update();
 
+        // Render Smokes
+        for(let i=smokes.length-1; i>=0; i--) {
+            let s = smokes[i];
+            ctx.fillStyle = `rgba(15,15,15,${Math.min(s.time/60, 0.98)})`;
+            ctx.fillRect(s.x, s.y, s.w, s.h);
+            if(!isRoundTransition && !gameEnded) s.time--;
+            if(s.time <= 0) smokes.splice(i, 1);
+        }
+
         if(!gameEnded && !isRoundTransition) {
             let me = (gameState==='playing_practice' || isHost) ? p1 : p2;
             let opp = (gameState==='playing_practice' || isHost) ? p2 : p1;
 
-            me.faceRight = me.pos.x < opp.pos.x;
-            if(!opp.isLocal) opp.faceRight = opp.pos.x < me.pos.x;
-
-            if(keys.left) me.vel.x = -8;
-            if(keys.right) me.vel.x = 8;
+            // Updated Player Movement & Facing Logic
+            if(keys.left) { me.vel.x = -8; me.faceRight = false; }
+            if(keys.right) { me.vel.x = 8; me.faceRight = true; }
             
+            // Bot AI Logic
+            if(gameState === 'playing_practice' && p2.hp > 0) {
+                let dist = p1.pos.x - p2.pos.x;
+                if (Math.abs(dist) > p2.attackBox.w - 10) {
+                    p2.vel.x = dist > 0 ? 4 : -4;
+                    p2.faceRight = dist > 0;
+                } else {
+                    p2.vel.x = 0;
+                    p2.attack();
+                }
+                if (p1.pos.y < p2.pos.y - 20 && Math.random() < 0.05 && p2.vel.y === 0) p2.vel.y = -15;
+            }
+
             if(keys.attack && !me.isAtk && !me.cd) {
                 me.attack();
                 if(me.attackBox.pos.x + me.attackBox.w >= opp.pos.x && me.attackBox.pos.x <= opp.pos.x + opp.w &&
@@ -782,15 +985,12 @@
                     updateQuest('damage', me.sword.damage);
                     updateUI();
                     
-                    // CẬP NHẬT MÁU TRỰC TIẾP LÊN MÁY CHỦ KHI TRÚNG ĐÒN
                     if(gameState === 'playing_ranked' || gameState === 'playing_normal') {
                         const roomRef = getPublicDocPath('rooms', currentRoomId);
                         let updateObj = {};
                         updateObj[isHost ? 'p2hp' : 'p1hp'] = opp.hp;
                         updateDoc(roomRef, updateObj).catch(e=>{});
                     }
-                    
-                    if(gameState === 'playing_practice') { updateQuest('practice', 1); }
                 }
             }
             keys.attack = false;
@@ -810,7 +1010,7 @@
         else {
             if(p1.hp > p2.hp) w = 1;
             else if(p2.hp > p1.hp) w = 2;
-            else w = -1; // Hòa -> Hiệp Phụ
+            else w = -1; 
         }
 
         if(w === 1) p1Score++;
@@ -820,26 +1020,26 @@
         document.getElementById('p2-score').innerText = p2Score;
 
         if(w === -1) {
-            showRoundMsg("HÒA! HIỆP PHỤ", 2000);
+            showRoundMsg("DRAW! SUDDEN DEATH", 2000);
             extratime = true;
             setTimeout(startRound, 2000);
         } else {
             if(p1Score >= winTarget || p2Score >= winTarget) {
                 let msg = "", col = "", isWin = null;
                 if(p1Score > p2Score) {
-                    msg = isHost ? "THẮNG!" : "THUA!"; col = isHost ? '#38a169' : '#e53e3e'; isWin = isHost;
+                    msg = isHost ? "VICTORY!" : "DEFEAT!"; col = isHost ? '#38a169' : '#e53e3e'; isWin = isHost;
                 } else {
-                    msg = isHost ? "THUA!" : "THẮNG!"; col = isHost ? '#e53e3e' : '#38a169'; isWin = !isHost;
+                    msg = isHost ? "DEFEAT!" : "VICTORY!"; col = isHost ? '#e53e3e' : '#38a169'; isWin = !isHost;
                 }
                 if(matchMode === 'practice') {
-                    msg = p1Score > p2Score ? "CHIẾN THẮNG!" : "THẤT BẠI!"; col = p1Score > p2Score ? '#38a169' : '#e53e3e'; isWin = p1Score > p2Score;
+                    msg = p1Score > p2Score ? "VICTORY!" : "DEFEAT!"; col = p1Score > p2Score ? '#38a169' : '#e53e3e'; isWin = p1Score > p2Score;
                 }
                 showMatchEnd(msg, col, isWin);
             } else {
                 currentRound++;
                 let txt = "";
-                if(matchMode === 'practice') txt = w === 1 ? "BẠN THẮNG HIỆP NÀY!" : "BOT THẮNG!";
-                else txt = (w === 1 && isHost) || (w === 2 && !isHost) ? "BẠN THẮNG HIỆP NÀY!" : "ĐỐI THỦ THẮNG!";
+                if(matchMode === 'practice') txt = w === 1 ? "YOU WON THIS ROUND!" : "BOT WON!";
+                else txt = (w === 1 && isHost) || (w === 2 && !isHost) ? "YOU WON THIS ROUND!" : "OPPONENT WON!";
                 showRoundMsg(txt, 2000);
                 setTimeout(startRound, 2000);
             }
@@ -882,13 +1082,13 @@
         
         let skipBtn = document.getElementById('skip-btn');
         skipBtn.style.display = 'block';
-        let countdown = 5; skipBtn.innerText = `BỎ QUA (${countdown}s)`;
+        let countdown = 5; skipBtn.innerText = `SKIP (${countdown}s)`;
         
         clearInterval(skipInterval);
         skipInterval = setInterval(() => {
             countdown--;
             if(countdown <= 0) { clearInterval(skipInterval); exitGame(); } 
-            else { skipBtn.innerText = `BỎ QUA (${countdown}s)`; }
+            else { skipBtn.innerText = `SKIP (${countdown}s)`; }
         }, 1000);
     }
 
