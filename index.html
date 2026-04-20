@@ -49,7 +49,6 @@
         #round-score { position: absolute; top: 60px; font-size: 20px; color: white; text-shadow: 2px 2px 0 #000; z-index: 10; display: none; }
         #round-msg { position: absolute; font-size: 35px; color: #ecc94b; text-shadow: 3px 3px 0 #000; text-align: center; display: none; z-index: 20; }
 
-        /* Moved mobile controls up */
         #mobile-controls {
             display: none;
             position: absolute; bottom: 80px; left: 0; width: 100%;
@@ -76,7 +75,6 @@
         
         .left-col, .right-col { flex: 1; display: flex; flex-direction: column; gap: 10px; min-width: 300px; }
         
-        /* Fixed Chat box expanding issue */
         #chat-box { flex: none; height: 150px; overflow-y: auto; background: #111827; padding: 10px; border-radius: 5px; font-size: 14px; }
         #leaderboard-list { flex: 1; overflow-y: auto; background: #111827; padding: 10px; border-radius: 5px; font-size: 14px; min-height: 150px; }
         
@@ -321,8 +319,8 @@
     let winTarget = 1;
     let p1Score = 0, p2Score = 0, currentRound = 1;
     let extratime = false, isRoundTransition = false, isWinProcessed = false;
-    let skipInterval, queuePingInterval = null;
-    let lastSmokeTs = 0;
+    let skipInterval, queuePingInterval = null, roundTimeout;
+    let lastSmokeTs = 0, opponentLastTs = 0;
 
     const getPublicPath = (col) => collection(db, 'artifacts', appId, 'public', 'data', col);
     const getPublicDocPath = (col, docId) => doc(db, 'artifacts', appId, 'public', 'data', col, docId);
@@ -378,7 +376,6 @@
         document.getElementById('name-modal').style.display = 'none';
         document.getElementById('dashboard').style.display = 'flex';
         
-        // Fill Rank modal list once
         document.getElementById('rank-list-content').innerHTML = RANKS.map(r => 
             `<div class="flex justify-between items-center p-2 border-b border-gray-700">
                 <span style="color: ${r.color}" class="font-bold">${r.name}</span>
@@ -412,6 +409,7 @@
     async function saveProfileData() {
         if (isFirebaseReady && currentUser) {
             try {
+                myProfile.rp = myProfile.rp || 0;
                 await updateDoc(getPrivateDocPath('profile', 'data'), myProfile);
                 await updateDoc(getPublicDocPath('leaderboard', currentUser.uid), { rp: myProfile.rp });
             } catch (e) {}
@@ -425,17 +423,17 @@
     function updateDashboardUI() {
         document.getElementById('ui-player-name').innerText = myProfile.name;
         document.getElementById('ui-gold').innerText = myProfile.gold;
-        document.getElementById('ui-rp').innerText = myProfile.rp;
+        document.getElementById('ui-rp').innerText = myProfile.rp || 0;
         
         let currentRank = RANKS[0], nextRank = RANKS[1];
         for (let i = 0; i < RANKS.length; i++) {
-            if (myProfile.rp >= RANKS[i].minRP) { currentRank = RANKS[i]; nextRank = RANKS[i+1] || null; }
+            if ((myProfile.rp || 0) >= RANKS[i].minRP) { currentRank = RANKS[i]; nextRank = RANKS[i+1] || null; }
         }
         
         document.getElementById('ui-rank-name').innerText = currentRank.name;
         document.getElementById('ui-rank-name').style.color = currentRank.color;
         
-        const prog = nextRank ? ((myProfile.rp - currentRank.minRP) / (nextRank.minRP - currentRank.minRP)) * 100 : 100;
+        const prog = nextRank ? (((myProfile.rp || 0) - currentRank.minRP) / (nextRank.minRP - currentRank.minRP)) * 100 : 100;
         document.getElementById('ui-rank-progress').style.width = `${Math.max(0, Math.min(100, prog))}%`;
         document.getElementById('ui-rank-progress').style.backgroundColor = currentRank.color;
 
@@ -740,33 +738,49 @@
             const docSnap = await getDoc(queueDoc);
             let isGhost = false;
             
-            // Check Ghost Room
+            // Check Ghost Room: If older than 6 seconds without a ping, it's dead
             if (docSnap.exists() && docSnap.data().state === 'waiting') {
-                if (Date.now() - (docSnap.data().lastPing || 0) > 5000) isGhost = true;
+                if (Date.now() - (docSnap.data().lastPing || 0) > 6000) isGhost = true;
             }
 
+            // Join existing room
             if (docSnap.exists() && docSnap.data().state === 'waiting' && docSnap.data().p1 !== currentUser.uid && !isGhost) {
-                isHost = false; currentRoomId = queueName;
-                await updateDoc(queueDoc, { 
+                isHost = false; 
+                currentRoomId = docSnap.data().roomId || ('room_' + Date.now()); 
+                
+                // Clear the Queue immediately so 3rd player can't overwrite
+                await deleteDoc(queueDoc);
+
+                const roomRef = getPublicDocPath('rooms', currentRoomId);
+                await setDoc(roomRef, { 
+                    p1: docSnap.data().p1, p1Name: docSnap.data().p1Name, p1Sword: docSnap.data().p1Sword,
                     p2: currentUser.uid, p2Name: myProfile.name, p2Sword: myProfile.sword, state: 'playing',
                     p1hp: 100, p2hp: 100, p1Score: 0, p2Score: 0, currentRound: 1, timer: 60 
                 });
-                startGameNetwork(docSnap.data());
+                
+                startGameNetwork({
+                    p1Name: docSnap.data().p1Name, p1Sword: docSnap.data().p1Sword,
+                    p2Name: myProfile.name, p2Sword: myProfile.sword
+                });
             } else {
-                isHost = true; currentRoomId = queueName;
+                // Create New Room Queue
+                isHost = true; 
+                currentRoomId = 'room_' + currentUser.uid + '_' + Date.now();
+                
                 await setDoc(queueDoc, { 
+                    roomId: currentRoomId,
                     p1: currentUser.uid, p1Name: myProfile.name, p1Sword: myProfile.sword, state: 'waiting',
-                    lastPing: Date.now(),
-                    p1hp: 100, p2hp: 100, p1Score: 0, p2Score: 0, currentRound: 1, timer: 60 
+                    lastPing: Date.now()
                 });
                 
                 queuePingInterval = setInterval(() => {
                     if(gameState === 'matchmaking') updateDoc(queueDoc, { lastPing: Date.now() }).catch(e=>{});
                 }, 2000);
 
-                roomUnsub = onSnapshot(queueDoc, snap => {
+                const roomRef = getPublicDocPath('rooms', currentRoomId);
+                roomUnsub = onSnapshot(roomRef, snap => {
                     if(snap.exists() && snap.data().state === 'playing' && snap.data().p2) {
-                        if(roomUnsub) roomUnsub();
+                        if(roomUnsub) { roomUnsub(); roomUnsub = null; }
                         if(queuePingInterval) clearInterval(queuePingInterval);
                         startGameNetwork(snap.data());
                     }
@@ -780,11 +794,13 @@
         document.getElementById('matchmaking-status').style.display = 'none';
         document.querySelectorAll('.btn-match').forEach(b => b.disabled = false);
         
-        if(roomUnsub) roomUnsub();
+        if(roomUnsub) { roomUnsub(); roomUnsub = null; }
         if(queuePingInterval) clearInterval(queuePingInterval);
 
+        // Delete the queue doc if we are the host
         if (isHost && currentRoomId) {
-            const queueDoc = getPublicDocPath('rooms', currentRoomId);
+            const queueName = matchMode === 'ranked' ? 'ranked_queue' : 'normal_queue';
+            const queueDoc = getPublicDocPath('rooms', queueName);
             try {
                 const snap = await getDoc(queueDoc);
                 if (snap.exists() && snap.data().p1 === currentUser.uid && snap.data().state === 'waiting') {
@@ -814,7 +830,8 @@
             if(gameEnded) return;
             let me = isHost ? p1 : p2;
             let data = {};
-            data[isHost ? 'p1State' : 'p2State'] = { x: me.pos.x, y: me.pos.y, atk: me.isAtk, faceRight: me.faceRight, shieldTime: me.shieldTime };
+            // Gửi cả Timestamp để check AFK
+            data[isHost ? 'p1State' : 'p2State'] = { x: me.pos.x, y: me.pos.y, atk: me.isAtk, faceRight: me.faceRight, shieldTime: me.shieldTime, ts: Date.now() };
             if (isHost) data.timer = timer; 
             updateDoc(roomRef, data).catch(e=>{});
         }, 100);
@@ -825,8 +842,17 @@
                 let opp = isHost ? p2 : p1;
                 let me = isHost ? p1 : p2;
                 
+                // Nếu đối thủ chủ động bấm Exit
+                if (data.left) {
+                    opp.hp = 0;
+                    updateUI();
+                    showMatchEnd("OPPONENT LEFT!", "#38a169", true);
+                    return;
+                }
+
                 let oppState = isHost ? data.p2State : data.p1State;
                 if(oppState) {
+                    opponentLastTs = oppState.ts || Date.now();
                     opp.targetX = oppState.x; opp.targetY = oppState.y;
                     if(oppState.faceRight !== undefined) opp.faceRight = oppState.faceRight;
                     if(oppState.shieldTime !== undefined) opp.shieldTime = oppState.shieldTime;
@@ -874,7 +900,7 @@
 
     function initMatch() {
         p1Score = 0; p2Score = 0; currentRound = 1; extratime = false; isWinProcessed = false;
-        lastSmokeTs = 0;
+        lastSmokeTs = 0; opponentLastTs = Date.now();
         document.getElementById('p1-score').innerText = '0';
         document.getElementById('p2-score').innerText = '0';
         document.getElementById('round-score').style.display = matchMode === 'ranked' ? 'block' : 'none';
@@ -926,7 +952,8 @@
     }
     
     function loop() {
-        if(gameState === 'dashboard') return;
+        // Stop execution if not in playing state
+        if(gameState !== 'playing_practice' && gameState !== 'playing_ranked' && gameState !== 'playing_normal') return;
         loopId = requestAnimationFrame(loop);
         
         let grd = ctx.createLinearGradient(0, 0, 0, 576);
@@ -955,15 +982,24 @@
             if(s.time <= 0) smokes.splice(i, 1);
         }
 
+        // Bắt lỗi đối thủ đóng trình duyệt / mất kết nối mạng
+        if (!gameEnded && !isRoundTransition && (gameState === 'playing_ranked' || gameState === 'playing_normal')) {
+            if (opponentLastTs > 0 && Date.now() - opponentLastTs > 6000) {
+                let opp = isHost ? p2 : p1;
+                opp.hp = 0;
+                updateUI();
+                showMatchEnd("OPPONENT DISCONNECTED!", "#38a169", true);
+                opponentLastTs = 0;
+            }
+        }
+
         if(!gameEnded && !isRoundTransition) {
             let me = (gameState==='playing_practice' || isHost) ? p1 : p2;
             let opp = (gameState==='playing_practice' || isHost) ? p2 : p1;
 
-            // Updated Player Movement & Facing Logic
             if(keys.left) { me.vel.x = -8; me.faceRight = false; }
             if(keys.right) { me.vel.x = 8; me.faceRight = true; }
             
-            // Bot AI Logic
             if(gameState === 'playing_practice' && p2.hp > 0) {
                 let dist = p1.pos.x - p2.pos.x;
                 if (Math.abs(dist) > p2.attackBox.w - 10) {
@@ -1022,7 +1058,7 @@
         if(w === -1) {
             showRoundMsg("DRAW! SUDDEN DEATH", 2000);
             extratime = true;
-            setTimeout(startRound, 2000);
+            roundTimeout = setTimeout(startRound, 2000);
         } else {
             if(p1Score >= winTarget || p2Score >= winTarget) {
                 let msg = "", col = "", isWin = null;
@@ -1041,7 +1077,7 @@
                 if(matchMode === 'practice') txt = w === 1 ? "YOU WON THIS ROUND!" : "BOT WON!";
                 else txt = (w === 1 && isHost) || (w === 2 && !isHost) ? "YOU WON THIS ROUND!" : "OPPONENT WON!";
                 showRoundMsg(txt, 2000);
-                setTimeout(startRound, 2000);
+                roundTimeout = setTimeout(startRound, 2000);
             }
         }
     }
@@ -1073,7 +1109,7 @@
             isWinProcessed = true; updateQuest('play', 1);
             if(matchMode === 'ranked') {
                 if(isWin) { myProfile.rp += 25; myProfile.gold += 50; updateQuest('win', 1); }
-                else { myProfile.rp = Math.max(0, myProfile.rp - 15); }
+                else { myProfile.rp = Math.max(0, (myProfile.rp||0) - 15); }
             } else if(matchMode === 'normal') {
                 if(isWin) { myProfile.gold += 20; updateQuest('win', 1); }
             }
@@ -1092,15 +1128,31 @@
         }, 1000);
     }
 
+    // Cơ chế Dọn dẹp Safe Exit
     window.exitGame = () => {
-        gameState = 'dashboard';
-        cancelAnimationFrame(loopId); clearTimeout(timerId); clearInterval(skipInterval);
-        if(syncInterval) clearInterval(syncInterval);
-        if(roomUnsub) roomUnsub();
-        document.getElementById('game-view').style.display = 'none';
-        document.getElementById('dashboard').style.display = 'flex';
-        document.querySelectorAll('.btn-match').forEach(b => b.disabled = false);
-        updateDashboardUI();
+        try {
+            gameState = 'dashboard';
+            document.getElementById('game-view').style.display = 'none';
+            document.getElementById('dashboard').style.display = 'flex';
+            document.querySelectorAll('.btn-match').forEach(b => b.disabled = false);
+            updateDashboardUI();
+            
+            // Xóa toàn bộ Timeout/Interval chạy ngầm
+            cancelAnimationFrame(loopId); 
+            clearTimeout(timerId); 
+            clearInterval(skipInterval);
+            if (typeof roundTimeout !== 'undefined') clearTimeout(roundTimeout);
+            if (syncInterval) clearInterval(syncInterval);
+            if (roomUnsub) { roomUnsub(); roomUnsub = null; }
+
+            // Báo cho đối thủ là mình đã thoát
+            if ((matchMode === 'ranked' || matchMode === 'normal') && currentRoomId) {
+                const roomRef = getPublicDocPath('rooms', currentRoomId);
+                updateDoc(roomRef, { left: true }).catch(e=>{});
+            }
+        } catch (error) {
+            console.error("Lỗi khi thoát game:", error);
+        }
     }
 
 </script>
